@@ -8,6 +8,7 @@ import { USER } from "./route/userRoute.js"
 import { dbConnect } from "./controller/dbController.js"  
 import session from "express-session"
 import MongoStore from "connect-mongo"
+import { SBUI } from "./route/sbuiRoutes.js"
 
 const app = express()
 
@@ -34,6 +35,9 @@ app.use(session({ secret: 'your_secret_key',
 // user route
 app.use('/api/v2/user', USER.router)
 // for route/page not found
+// Server base UI 
+app.use('/api/v2/sbui', SBUI.router)
+
 app.all('*', (req, res) => {
     throw new appError(NOT_FOUND, 'page not found')
 })
