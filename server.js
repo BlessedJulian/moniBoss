@@ -28,7 +28,6 @@ app.use(express.json())
 app.use(session(sessionDetail))
 
 
-
 //  routes
 
 // user route
