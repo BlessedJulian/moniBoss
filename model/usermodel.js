@@ -75,7 +75,16 @@ const userSchema = new Schema({
     expiredAt : {
         type : Date
     },
-      resetToken : {  
+    passwordResetToken : {  
+        token : {
+                type : String,
+                trim : true
+        },
+        expiredAt : {
+                type : Date
+        }
+    },
+    tranPinResetToken : {  
         token : {
                 type : String,
                 trim : true
@@ -84,7 +93,7 @@ const userSchema = new Schema({
                 type : Date
         }
     }
-    
+
 },  {timestamps : true})
 
 

@@ -1,33 +1,33 @@
 import express from "express"
 import { errorHandler } from "./controller/errorHandler.js"
-import { ENV, PORT } from "./config.js"
+import { ENV, PORT,  } from "./config.js"
 import { appError } from "./utils/index.js"
 import { NOT_FOUND } from "./constants/statusCode.js"
 import morgan from 'morgan'
 import { USER } from "./route/userRoute.js"
 import { dbConnect } from "./controller/dbController.js"  
 import session from "express-session"
-import MongoStore from "connect-mongo"
+import { sessionDetail } from "./controller/sessionController.js"
 
 const app = express()
 
 //middle ware
 if(ENV === "development"){
+
     app.use(morgan('dev'))  
     console.log({Mode  : ENV})  
 }
+
+if (ENV === "production") {
+    app.set('trust proxy', 1) // trust first proxy
+}
+
 app.use(express.json())
-app.use(session({ secret: 'your_secret_key', 
-    resave: false, 
-    saveUninitialized: true, 
-    cookie: { 
-        secure: false,
-        maxAge: 24 * 60 * 60 * 1000
-     },
-     store : MongoStore.create({
-        mongoUrl : 'mongodb://127.0.0.1:27017/moniBoss'
-     }) 
-}))
+
+// user sesion Detail
+app.use(session(sessionDetail))
+
+
 
 //  routes
 

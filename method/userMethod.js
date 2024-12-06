@@ -7,7 +7,7 @@ import { OTPDataDetail } from "../model/OTPModel.js"
 import { responseHandler } from "../controller/responseHandler.js"
 import crypto from "crypto"
 import bcrypt from 'bcryptjs'
-import { SECRET } from "../config.js"
+import { baseUrl, SECRET } from "../config.js"
 import axios from "axios"
 
 
@@ -27,8 +27,8 @@ export const otpMethod = tryCatch(async(req, res, next) => {
         if(phoneNumber.length != 11) throw new appError(BAD_REQUEST, "Invalid Phone Number")
          
         // add +234 to phone number
-        // const completeNumber = '+234' + (phoneNumber).replace(/^0/, '')
-        const completeNumber = Number(phoneNumber)
+        const completeNumber = '+234' + (phoneNumber).replace(/^0/, '')
+        // const completeNumber = Number(phoneNumber)
 
         if(!completeNumber) throw new appError(BAD_REQUEST, 'Invalid Phone Number')
 
@@ -86,7 +86,6 @@ export const otpMethod = tryCatch(async(req, res, next) => {
 
     }
 
-    // ===================validate sent OTP =================
      else if(req.params['otp'] === "validateOTP" ){
 
         const{phoneNumber, otp} = req.body
@@ -129,66 +128,50 @@ export const otpMethod = tryCatch(async(req, res, next) => {
 
 //  Get user nin token header
 export const requireUserNINToken = tryCatch(async(req, res, next) => {
-    
-     const response = await axios.post('https://passport.immigration.gov.ng:8443/ngnPassport/v1/auth/serverToken')
 
-    //  return(res.json(response.data))
- 
-    const jsonData = JSON.stringify(response.data); // Parse if it's a string
-    const header = JSON.parse(jsonData);
-
-    req.header = header
-    
-       next ()
-
+        const response = await axios.post(`${baseUrl}v1/auth/serverToken`);
+         req.header = response.data
+      
+         next(); 
 })
 
 //Get user NIN
 export const ninMethod = tryCatch(async(req, res, next) => {
-    const token = req.header
-    const {bearerToken} = token
+
+
+    const { bearerToken } = req.header;
 
     const {dateOfBirthMonth, nin, dateOfBirthDay,dateOfBirthYear,dateOfBirth } = req.body
 
     if(!dateOfBirthMonth || !dateOfBirthDay || !dateOfBirthYear || !nin) 
         throw new appError(BAD_REQUEST, 'Please all field')
+
   const header = { 
         'Application_crest': `${bearerToken}`, 
         'Content-Type': 'application/json'
     }
 
+    const ninData = {
+        "applyingFor": "FRESH",
+        dateOfBirthMonth,
+        nin,
+        dateOfBirthDay,
+        dateOfBirthYear,
+        dateOfBirth
+    }
+
     const config = {  
         method: 'post',
-        url: 'https://passport.immigration.gov.ng:8443/ngnPassport/v2/application/validateNIN',
+        url: `${baseUrl}v2/application/validateNIN`,
         headers : header,
-        data : {
-            "applyingFor": "FRESH",
-            dateOfBirthMonth,
-            nin,
-            dateOfBirthDay,
-            dateOfBirthYear,
-            dateOfBirth
-        }
+        data : ninData 
     };
 
-    axios.request(config)
-    .then((response) => {
-     const userData = (JSON.stringify(response.data));
-     const userDetail = JSON.parse(userData);
-     const {details : {firstName, middleName, lastName, gender}} = userDetail
-        //  req.firstName = firstName
-        //  req.middleName = middleName
-        //  req.lastName = lastName
-        //  req.gender = gender
+    const response = await axios.request(config);
+    const { details: { firstName, middleName, lastName, gender } } = response.data;
 
-        // return res.send({firstName, middleName, lastName, gender})
-        responseHandler(req, res, OK, {firstName, middleName, lastName, gender} ) 
-      
-     
-    })
-    .catch((error) => {
-        console.log(error.message);
-    });    
+    responseHandler(req, res, OK, {firstName, middleName, lastName, gender} ) 
+
     
 })
 
@@ -304,6 +287,8 @@ export const logInMethod = tryCatch(async(req, res, next) => {
     // const token  = await Users.userAuthentication({_id})
      req.session._id = _id
     const ttt= req.session.id
+    // Send cookies to header
+    // res.set('X-Session-Data', JSON.stringify(req.session));
 
     responseHandler(req, res, OK, 'login successful', {_id, ttt})
 })
@@ -401,7 +386,7 @@ export const passwordMethod = tryCatch(async(req, res, next) => {
         const filter = { 'contactDetail.phoneNumber' : completeNumber};
         const updateData = {
 
-             resetToken :   { token  : encryptOTP,
+             passwordResetToken :   { token  : encryptOTP,
                 expiredAt: Date.now() + 360000 
             }
         }
@@ -476,9 +461,10 @@ export const passwordMethod = tryCatch(async(req, res, next) => {
 })
 
 
-// .................Change User Transaction pin........................
+// .................Change  and reset User Transaction pin........................
 export const  changeUserTranPinMethod = tryCatch(async(req, res, next) => {
-    const _id = req._id
+    // const _id = req._id
+    const _id = req.session._id 
     
     // destructuring request body
     const {oldPin, newPin, confirmNewPin} = req.body 
@@ -497,7 +483,7 @@ export const  changeUserTranPinMethod = tryCatch(async(req, res, next) => {
 
 
     // checking if both pin match
-    if(numberNewPin != confirmNewPin)throw new appError(BAD_REQUEST, 'Password mismatch')
+    if(numberNewPin != confirmNewPin)throw new appError(BAD_REQUEST, 'Pin mismatch')
 
     const pin = numberNewPin.toString()
 
@@ -536,10 +522,122 @@ export const  changeUserTranPinMethod = tryCatch(async(req, res, next) => {
 
 })
 
+// reset user transaction Pin
+export const resetTranPinMethod = tryCatch(async(req, res, next) => {
+    
+    // -----------------Send Reset token-------------------------------
+    if(req.params['transPin'] === "sendToken"){
+
+        const _id = req.session._id
+
+        
+        
+        //  checking for user phone number 
+        const Users = new User
+        
+        const user = await Users?.findUserDetail(_id)
+
+        const phoneNumber = user.contactDetail.phoneNumber
+
+
+        // generate OTP
+        const genOTP = generateOTP(6);
+
+        // Hashing of OTP
+        const encryptOTP = await Users.createHashedOTP(genOTP)
+        console.log({otp : genOTP})
+
+        const filter = { 'contactDetail.phoneNumber' : phoneNumber};
+        const updateData = {
+
+             tranPinResetToken :   { token  : encryptOTP,
+                expiredAt: Date.now() + 360000 
+            }
+        }
+    
+        // checking if transaction pin exit
+        const check = await Users.updateUsers(filter, updateData)
+        
+        responseHandler(req, res, CREATED, `Reset token created`, 'proceed to validate token sent to Your phone Number')
+    }
+
+     // -----------------validate Transaction pin Reset token----------------------------
+     else if(req.params['transPin'] === "validateTranPinToken" ){
+
+        const _id = req.session._id
+
+        const{token, newPin, confirmNewPin} = req.body
+
+        // checking if field is empty
+        if(!token || !newPin || !confirmNewPin)  
+            throw new appError(BAD_REQUEST, 'Please fill in all required fields')
+
+        
+        // checking if New transaction pin is numberonly
+        const numberNewPin = Number(newPin)
+        if(!numberNewPin)throw new appError(BAD_REQUEST, 'Pin should only contain numbers')
+
+
+        // checking if both pin match
+        if(numberNewPin != confirmNewPin)throw new appError(BAD_REQUEST, 'Password mismatch')
+
+        const pin = numberNewPin.toString()
+
+               
+        const Users= new User
+
+
+        const user = await Users?.findUserDetail(_id)
+
+        const phoneNumber = user.contactDetail.phoneNumber
+    
+
+        const findUser = await Users.findUser({'contactDetail.phoneNumber' : phoneNumber})
+
+        
+
+        // destructuring findPhoneNumber
+        const {transactionPin, tranPinResetToken : {token : tokenNumber, expiredAt}} = findUser
+
+        // checking if token match
+        const hashedToken = await Users.verifyToken(token)
+
+        const compareToken=  hashedToken === tokenNumber
+        
+        if(!compareToken) throw new appError(BAD_REQUEST, "Wrong Token")
+
+        // checking if Token has expired
+        const expired =   Date.parse(expiredAt)
+        
+        const compareTime = Date.now() > expired
+
+        if(compareTime) throw new appError(BAD_REQUEST, "Expired Token")
+
+        // hashing new transaction pin
+        const  hashNewPin = await Users?.hashTranPin(pin)
+
+
+        // Updating User new transaction
+        
+        const filter = { _id};
+        const updateData = {
+            transactionPin : hashNewPin
+        }
+    
+        // checking if transaction pin exit
+        const updateTranPin = await Users.updateUsers(filter, updateData)
+
+
+ 
+        responseHandler(req, res, CREATED, 'New Transaction Pin created', "Transaction pin changed")
+    }
+})
+
 
 // .................Change User password........................
 export const changeUserPasswordMethod = tryCatch(async(req, res, next) => {
-    const _id = req._id
+    // const _id = req._id
+    const _id = req.session._id 
     
     // destructuring request body
     const {oldPassword, newPassword, confirmNewPassword} = req.body 
@@ -590,10 +688,12 @@ export const changeUserPasswordMethod = tryCatch(async(req, res, next) => {
 
 // ................. update profile............................
 export const updatedProfileMethod = tryCatch(async(req, res, next) => {
-    const _id = req._id
+    // const _id = req._id
+    const _id = req.session._id
 
-    const pic = req.file
+
     const {Bio : {BVN} } = req.body 
+    const pic = req.file ? req.file.path : null;
 
     
 
@@ -603,8 +703,6 @@ export const updatedProfileMethod = tryCatch(async(req, res, next) => {
 
     const {Bio : {firstName, lastName, otherName, gender, image}} = currentUser
 
-    
-    
     
 
 
@@ -643,6 +741,18 @@ export const updatedProfileMethod = tryCatch(async(req, res, next) => {
     res.send({profilePic : updateProfile})
 
     
+})
+
+
+export const getUserDetailMethod = tryCatch(async(req, res, next) => {
+
+    const _id = req.session._id 
+    const Users= new User
+
+    const user = await Users?.findUserDetail(_id)
+
+    responseHandler(req, res, OK, 'User Detail', user)
+
 })
 
 

@@ -1,9 +1,8 @@
 import express from "express"
-import { signUpMethod, otpMethod, logInMethod,  passwordMethod, changeUserTranPinMethod, createTranPinMethod, changeUserPasswordMethod, updatedProfileMethod, ninMethod, requireUserNINToken} from "../method/userMethod.js"
+import { signUpMethod, otpMethod, logInMethod,  passwordMethod, changeUserTranPinMethod, createTranPinMethod, changeUserPasswordMethod, updatedProfileMethod, ninMethod, requireUserNINToken, getUserDetailMethod, resetTranPinMethod} from "../method/userMethod.js"
 import { sanitiseUserLogIn, sanitiseUserTransPin, santiseUserSignUpInput} from "../middleWare/sanitizeInput.js"
 import { requireToken } from "../middleWare/authenticateUser.js"
 import { profilePic } from "../controller/multerController.js"
-import { requireNINToken } from "../middleWare/authenticateuserNiN.js"
 import { isAuthenticated } from "../middleWare/isAuth.js"
 
 const router = express.Router()
@@ -23,11 +22,15 @@ router
     // reset password
     .post('/resetPassword/:password', passwordMethod)
     // Change User Transaction password
-    .post('/changeUserTranPin',requireToken , changeUserTranPinMethod)
+    .post('/changeUserTranPin',isAuthenticated, changeUserTranPinMethod)
+     // reset User Transaction password
+     .post('/resetTranPin/:transPin', isAuthenticated, resetTranPinMethod)
     // Change User  password
-    .post('/changeUserPassword', requireToken, changeUserPasswordMethod)
+    .post('/changeUserPassword', isAuthenticated, changeUserPasswordMethod)
     // for user to update their profile
-    .post('/updateProfile',  requireToken, profilePic, updatedProfileMethod)
+    .post('/updateProfile',  isAuthenticated, profilePic, updatedProfileMethod)
+    // get user Detail
+    .post('/getUserDetail', isAuthenticated, getUserDetailMethod )
    
    
 export const USER = {
